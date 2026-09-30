@@ -3,7 +3,9 @@ import { api, LANG_FONT, liveApi, type Advisory, type Outlook, type Report, type
 import { GustBars } from './Live'
 import Sahayak, { AFTER_ALERT, speak as sayAloud } from './Sahayak'
 
-const PRESETS = [
+export type Place = { name: string; lat: number; lon: number }
+
+export const PRESETS: Place[] = [
   { name: 'Puri town', lat: 19.8106, lon: 85.8314 },
   { name: 'Konark', lat: 19.8876, lon: 86.0945 },
   { name: 'Satapada', lat: 19.6700, lon: 85.4400 },
@@ -33,6 +35,64 @@ export default function Citizen() {
   const [place, setPlace] = useState(initial)
   const [places, setPlaces] = useState(params.get('lat') ? [initial, ...PRESETS.filter((p) => p.name !== initial.name)] : PRESETS)
   const [district, setDistrict] = useState('')
+
+  useEffect(() => {
+    api.plan().then((p) => {
+      const extra = p.ranked.slice(0, 6).map((r) => ({ name: `${r.name} (#${r.rank})`, lat: r.lat, lon: r.lon }))
+      setPlaces((cur) => [...cur, ...extra.filter((e) => !cur.some((c) => c.name === e.name))])
+    }).catch(() => {})
+  }, [])
+
+  return (
+    <div className="phone-page">
+      <div className="phone-side">
+        <div className="brand"><span className="brand-mark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round"><path d="M12 3a9 9 0 1 0 9 9" /><path d="M12 7a5 5 0 1 0 5 5" /></svg></span>Resident view</div>
+        <div>This is what a person in the district sees. It checks for new alerts every 3 seconds, so keep it open next to the console and approve an advisory to watch it arrive.</div>
+        <label className="stack" style={{ gap: 6 }}>
+          <span className="eyebrow">Phone location</span>
+          <select value={place.name} onChange={(e) => setPlace(places.find((x) => x.name === e.target.value)!)}>
+            {places.map((p) => <option key={p.name}>{p.name}</option>)}
+          </select>
+        </label>
+        <div className="small muted">District: {district || '…'} · {place.lat.toFixed(3)}, {place.lon.toFixed(3)}</div>
+      </div>
+      <PhoneApp place={place} onDistrict={setDistrict} />
+    </div>
+  )
+}
+
+// Two-tone ring (like a phone call) while an alert call is waiting, made with Web Audio so there is no sound file.
+function useRingtone(on: boolean) {
+  useEffect(() => {
+    if (!on) return
+    const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!AC) return
+    const ctx = new AC()
+    const burst = (at: number) => {
+      const gain = ctx.createGain()
+      gain.gain.setValueAtTime(0, at)
+      gain.gain.linearRampToValueAtTime(0.12, at + 0.02)
+      gain.gain.setValueAtTime(0.12, at + 0.38)
+      gain.gain.linearRampToValueAtTime(0, at + 0.42)
+      gain.connect(ctx.destination)
+      for (const f of [440, 480]) {
+        const o = ctx.createOscillator()
+        o.frequency.value = f
+        o.connect(gain)
+        o.start(at)
+        o.stop(at + 0.45)
+      }
+    }
+    const ring = () => { const t = ctx.currentTime + 0.05; burst(t); burst(t + 0.6) }
+    ring()
+    const id = setInterval(ring, 2600)
+    return () => { clearInterval(id); ctx.close().catch(() => {}) }
+  }, [on])
+}
+
+/** The resident's phone. `replay` puts it in the Cyclone Fani story (used when it is docked in the console). */
+export function PhoneApp({ place, onDistrict, replay = false }: { place: Place; onDistrict?: (d: string) => void; replay?: boolean }) {
+  const [district, setDistrict] = useState('')
   const [alerts, setAlerts] = useState<Advisory[]>([])
   const [shelter, setShelter] = useState<Shelter | null>(null)
   const [screen, setScreen] = useState<'chat' | 'report' | 'bot'>('chat')
@@ -50,18 +110,15 @@ export default function Citizen() {
     return () => clearInterval(id)
   }, [place.lat, place.lon])
 
-  useEffect(() => {
-    api.plan().then((p) => {
-      const extra = p.ranked.slice(0, 6).map((r) => ({ name: `${r.name} (#${r.rank})`, lat: r.lat, lon: r.lon }))
-      setPlaces((cur) => [...cur, ...extra.filter((e) => !cur.some((c) => c.name === e.name))])
-    }).catch(() => {})
-  }, [])
+  // A different location is a different person: start their screen fresh.
+  useEffect(() => { setShelter(null); setLastReport(null); setReached(false); setScreen('chat') }, [place.lat, place.lon])
 
   useEffect(() => {
     let live = true
     const load = () => api.feed(place.lat, place.lon).then((f) => {
       if (!live) return
       setDistrict(f.district)
+      onDistrict?.(f.district)
       setAlerts(f.alerts)
       if (f.shelter) setShelter((s) => (lastReport ? s ?? f.shelter : f.shelter))
     }).catch(() => {})
@@ -85,27 +142,18 @@ export default function Citizen() {
   const shown = english ? 'en' : lang
   const text = alert?.texts[shown]
 
-  return (
-    <div className="phone-page">
-      <div className="phone-side">
-        <div className="brand"><span className="brand-mark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round"><path d="M12 3a9 9 0 1 0 9 9" /><path d="M12 7a5 5 0 1 0 5 5" /></svg></span>Resident view</div>
-        <div>This is what a person in the district sees. It checks for new alerts every 3 seconds, so keep it open next to the console and approve an advisory to watch it arrive.</div>
-        <label className="stack" style={{ gap: 6 }}>
-          <span className="eyebrow">Phone location</span>
-          <select value={place.name} onChange={(e) => { const p = places.find((x) => x.name === e.target.value)!; setPlace(p); setShelter(null); setLastReport(null); setReached(false) }}>
-            {places.map((p) => <option key={p.name}>{p.name}</option>)}
-          </select>
-        </label>
-        <div className="small muted">District: {district || '…'} · {place.lat.toFixed(3)}, {place.lon.toFixed(3)}</div>
-      </div>
+  useRingtone(!!ringing)
 
-      <div className="phone">
+  return (
+      <div className={`phone${ringing ? ' ringing' : ''}`}>
         {ringing && (
           <IncomingCall district={district} onDecline={() => setRinging(null)} onAnswer={() => {
             const l = ringing.languages.find((x) => x !== 'en' && ringing.texts[x]?.body) ?? 'en'
             const t = ringing.texts[l]
             const follow = AFTER_ALERT[l] ?? AFTER_ALERT.en
-            sayAloud(`${t.headline}. ${t.body}. ${follow}`, l)
+            // Read it in the local language when the device has that voice, otherwise in English.
+            const en = ringing.texts.en
+            if (!sayAloud(`${t.headline}. ${t.body}. ${follow}`, l) && en?.body) sayAloud(`${en.headline}. ${en.body}. ${AFTER_ALERT.en}`, 'en')
             setBotOpening([{ role: 'bot', text: `${t.headline} ${t.body}` }, { role: 'bot', text: follow }])
             setRinging(null)
             setScreen('bot')
@@ -124,7 +172,14 @@ export default function Citizen() {
               </span>
             </header>
             <div className="scroll">
-              {!alert && outlook && <OutlookCard o={outlook} place={place.name} />}
+              {!alert && replay && (
+                <div className="card fade-in" style={{ width: 326, alignSelf: 'flex-start', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', color: '#8a5a00' }}>REPLAY · CYCLONE FANI · 2 MAY 2019</span>
+                  <span style={{ fontFamily: 'var(--serif)', fontSize: 22, lineHeight: '26px' }}>A severe cyclone is heading for the Odisha coast</span>
+                  <span style={{ fontSize: 13, lineHeight: '19px', color: '#3a434b' }}>This is the phone of a resident in {place.name}. When the district approves its advisory, this phone rings and reads the warning aloud.</span>
+                </div>
+              )}
+              {!alert && !replay && outlook && <OutlookCard o={outlook} place={place.name} />}
               {!alert && (
                 <div style={{ textAlign: 'center', color: '#5f6a73', fontSize: 13, lineHeight: '19px', padding: '4px 16px' }}>
                   No official alerts for {district || 'your area'}. Alerts from the district appear here the moment they are approved.
@@ -163,7 +218,7 @@ export default function Citizen() {
                   <button className="pill-btn hot" onClick={() => setScreen('report')}>Report water</button>
                 </div>
               )}
-              {alert && outlook && <OutlookCard o={outlook} place={place.name} />}
+              {alert && !replay && outlook && <OutlookCard o={outlook} place={place.name} />}
               {lastReport && (
                 <div className="card fade-in" style={{ padding: 14, fontSize: 14, lineHeight: '21px' }}>
                   <b>Your report was checked.</b> {lastReport.notes} {lastReport.matches_model ? 'It matches the flood forecast for this spot.' : 'The forecast did not expect water here; the control room has been told.'}
@@ -184,7 +239,6 @@ export default function Citizen() {
           <ReportScreen place={place} shelter={shelter} onBack={() => setScreen('chat')} onDone={(r, s) => { setLastReport(r); if (s) setShelter(s); setScreen('chat') }} />
         )}
       </div>
-    </div>
   )
 }
 

@@ -4,6 +4,7 @@ import { LivePanel } from './Live'
 import MapView from './MapView'
 import WindParticles from './WindParticles'
 import Guide from './Guide'
+import PhoneDock, { useDockSize } from './PhoneDock'
 import { CommandPanel, DispatchPanel, PlanPanels, RiskPanel, VerifyPanel } from './Panels'
 import { api, apiUrl, fmtT, liveApi, runAgent, type AgentStep, type Asset, type Health, type HelpRequest, type LiveOverview, type LngLat, type Plan, type Report, type Risk, type StormState, type WindField } from './api'
 
@@ -42,6 +43,10 @@ export default function Console() {
   const stopAgent = useRef<() => void>(() => {})
   // Judges' guide: opens on the first visit; the choice is remembered per browser.
   const [guide, setGuide] = useState(() => { try { return localStorage.getItem('pk-guide') !== 'closed' } catch { return true } })
+  // The resident's phone docks on the right of Dispatch so the alert call happens in the same window.
+  const [phone, setPhone] = useState(true)
+  const dockSize = useDockSize()
+  const docked = phone && tab === 'dispatch'
   const toggleGuide = (open: boolean) => { setGuide(open); try { localStorage.setItem('pk-guide', open ? 'open' : 'closed') } catch { /* private mode */ } }
 
   useEffect(() => {
@@ -217,7 +222,11 @@ export default function Console() {
           {!guide && <button className="btn-ghost guide-open" onClick={() => toggleGuide(true)}>Guide</button>}
           <button className="btn-ghost" style={{ height: 36, fontSize: 13 }} title="Clear the plan, advisories and reports"
             onClick={async () => { await fetch(apiUrl('/api/reset'), { method: 'POST' }); setPlan(null); setSteps([]); setSelected(null); setReports([]); setHelp([]); setTab('live'); setT(-48) }}>Reset</button>
-          <a className="btn-ghost" style={{ height: 36, fontSize: 13 }} href="/citizen" target="_blank" rel="noreferrer">Phone ↗</a>
+          <button className={`btn-ghost${docked ? ' phone-on' : ''}`} style={{ height: 36, fontSize: 13 }} title="The resident's phone that receives the alert"
+            onClick={() => { if (docked) setPhone(false); else { setPhone(true); setTab('dispatch') } }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="6" y="2" width="12" height="20" rx="3" /><path d="M11 18h2" /></svg>
+            Phone
+          </button>
         </div>
       </header>
 
@@ -314,7 +323,8 @@ export default function Console() {
         <PlanPanels plan={plan} steps={steps} running={agentRunning} selected={selected} onSelect={selectCandidate}
           onRun={startAgent} t={t} onApprove={() => setTab('dispatch')} />
       )}
-      {tab === 'dispatch' && <DispatchPanel plan={plan} risk={risk} onNeedPlan={() => setTab('plan')} help={help}
+      {docked && <PhoneDock scale={dockSize.scale} width={dockSize.width} onClose={() => setPhone(false)} />}
+      {tab === 'dispatch' && <DispatchPanel plan={plan} risk={risk} onNeedPlan={() => setTab('plan')} help={help} dock={docked ? dockSize.width + 16 : 0}
         onHelp={async (id, status) => { await api.updateHelp(id, status); api.help().then(setHelp) }} onFocus={(lon, lat) => setFocus([lon, lat])} />}
       {tab === 'verify' && <VerifyPanel health={health} onFocus={(lon, lat) => setFocus([lon, lat])} />}
 

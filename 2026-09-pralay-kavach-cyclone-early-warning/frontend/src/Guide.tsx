@@ -60,16 +60,15 @@ const STEPS: Step[] = [
   {
     tab: 'dispatch', kicker: '5 · Warn', title: 'One warning, every language',
     body: 'Gemini drafts the advisory in Odia, Telugu, Bengali and English, with an English back-translation so the officer can check it. '
-      + 'Two officers must approve before it goes out as a standard CAP alert.',
-    try: 'Press "Write advisory", review it, then approve as the Duty officer and the Relief Commissioner.',
+      + 'Two officers must approve before it goes out as a standard CAP alert. The phone on the right belongs to a resident of Puri.',
+    try: 'Press "Write advisory", then approve as the Duty officer and the Relief Commissioner. Within seconds the phone on the right rings.',
     target: () => byText('button', 'Write advisory') ?? byText('button', 'Approve'),
   },
   {
-    tab: 'dispatch', kicker: '6 · Resident', title: 'What a person on the coast sees',
-    body: 'The phone view is one resident in the district. Approved alerts arrive within seconds and are read aloud, '
-      + 'with the person\'s own shelter and a safe route.',
-    try: 'Open the phone, tap "Talk to Sahayak" and type: "Water is coming into my house". It puts Call 112 first and sends a rescue request to this console (watch for the SOS badge).',
-    target: () => document.querySelector('a[href="/citizen"]'), action: 'phone',
+    tab: 'dispatch', kicker: '6 · Resident', title: 'The phone rings',
+    body: 'Answer the call: the warning is read aloud, then the phone shows this person\'s own shelter and whether the route there stays dry.',
+    try: 'After answering, tap "Talk to Sahayak" and type: "Water is coming into my house". It puts Call 112 first and sends a rescue request to this console (watch the SOS badge).',
+    target: () => document.querySelector('.phone-dock') ?? byText('.topbar-right button', 'Phone'),
   },
   {
     tab: 'verify', kicker: '7 · Verify', title: 'Checked against what really happened',

@@ -292,9 +292,11 @@ function HelpList({ help, onHelp, onFocus }: { help: HelpRequest[]; onHelp: (id:
   )
 }
 
-export function DispatchPanel({ plan, risk, onNeedPlan, help = [], onHelp, onFocus }: {
+export function DispatchPanel({ plan, risk, onNeedPlan, help = [], onHelp, onFocus, dock = 0 }: {
   plan: Plan | null; risk: Risk | null; onNeedPlan: () => void
   help?: HelpRequest[]; onHelp?: (id: string, s: string) => void; onFocus?: (lon: number, lat: number) => void
+  /** Width taken by the resident's phone docked on the right (0 when hidden). */
+  dock?: number
 }) {
   const districts = (plan?.districts ?? risk?.districts ?? []).map((d) => d.district)
   const [district, setDistrict] = useState<string | null>(null)
@@ -343,7 +345,7 @@ export function DispatchPanel({ plan, risk, onNeedPlan, help = [], onHelp, onFoc
   const top = plan.ranked.find((r) => r.district === district)
   return (
     <>
-      <aside className="panel left glass fade-in">
+      {!dock && <aside className="panel left glass fade-in">
         <div className="eyebrow">Districts in the plan</div>
         <div className="stack" style={{ gap: 6 }}>
           {(plan.districts ?? []).map((d) => (
@@ -355,11 +357,17 @@ export function DispatchPanel({ plan, risk, onNeedPlan, help = [], onHelp, onFoc
         </div>
         {onHelp && onFocus && <HelpList help={help} onHelp={onHelp} onFocus={onFocus} />}
         <div className="note spacer">Channels: CAP feed for SACHET, cell broadcast, SMS, WhatsApp, voice call. In this prototype, dispatch goes to the citizen phone view, which rings and reads the alert aloud.</div>
-      </aside>
+      </aside>}
 
-      <main className="panel center glass fade-in">
+      <main className="panel center glass fade-in" style={dock ? { left: 20, right: 436 + dock } : undefined}>
         <div className="stack" style={{ gap: 8 }}>
-          <div className="eyebrow row" style={{ color: 'var(--cyan-soft)', gap: 8 }}><Spark /> Advisory · {district} district</div>
+          <div className="eyebrow row" style={{ color: 'var(--cyan-soft)', gap: 8 }}><Spark /> Advisory ·{' '}
+            {dock ? (
+              <select className="district-select" value={district ?? ''} aria-label="District" onChange={(e) => setDistrict(e.target.value)}>
+                {(plan.districts ?? []).map((d) => <option key={d.district} value={d.district}>{d.district} district</option>)}
+              </select>
+            ) : <>{district} district</>}
+          </div>
           <h1 className="title" style={{ fontSize: 42 }}>Review the <i>message</i></h1>
         </div>
         {!adv && (
@@ -407,7 +415,7 @@ export function DispatchPanel({ plan, risk, onNeedPlan, help = [], onHelp, onFoc
         )}
       </main>
 
-      <aside className="panel right glass fade-in">
+      <aside className="panel right glass fade-in" style={dock ? { right: 20 + dock } : undefined}>
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div className="eyebrow">CAP 1.2 message</div>
           <span className="chip amber">Replay sends as Exercise</span>
@@ -434,12 +442,15 @@ export function DispatchPanel({ plan, risk, onNeedPlan, help = [], onHelp, onFoc
                 <b style={{ color: 'var(--cyan-soft)' }}>Dispatched to {district}</b>
                 <span className="small muted">Phones in the district now show the alert with their own shelter and route.</span>
               </div>
-              <a className="btn-primary" href={`/citizen${top ? `?lat=${top.lat}&lon=${top.lon}&name=${encodeURIComponent(top.name)}` : ''}`} target="_blank" rel="noreferrer">Open a resident's phone ↗</a>
+              {dock
+                ? <span className="small" style={{ color: 'var(--ember-soft)' }}>The resident's phone on the right gets a call with this warning. Answer it to hear it read aloud.</span>
+                : <a className="btn-primary" href={`/citizen${top ? `?lat=${top.lat}&lon=${top.lon}&name=${encodeURIComponent(top.name)}` : ''}`} target="_blank" rel="noreferrer">Open a resident's phone ↗</a>}
             </>
           ) : (
             <div className="small muted" style={{ textAlign: 'center' }}>Dispatch happens automatically after the second approval.</div>
           )}
         </div>
+      {dock > 0 && onHelp && onFocus && <HelpList help={help} onHelp={onHelp} onFocus={onFocus} />}
       </aside>
     </>
   )

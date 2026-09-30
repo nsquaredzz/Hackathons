@@ -316,3 +316,29 @@ pre.cap {
   .guide { left: 10px !important; right: 10px; top: auto !important; bottom: 10px !important; width: auto; max-height: 55vh; }
 }
 @media (prefers-reduced-motion: reduce) { .guide-ring { animation: none; transition: none; } }
+
+/* ---------- resident's phone docked in the console ---------- */
+.phone-dock {
+  position: absolute; right: 20px; top: 92px; bottom: 20px; z-index: 6; border-radius: 22px; padding: 0 12px 12px;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.phone-dock-head { height: 52px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
+.phone-dock-head .eyebrow { white-space: nowrap; }
+.phone-dock-head select, .district-select {
+  min-width: 0; flex: 1; height: 30px; border-radius: 8px; background: #16212a; color: var(--text); border: 1px solid var(--line-2);
+  padding: 0 8px; font-family: inherit; font-size: 12.5px;
+}
+.district-select { flex: none; height: 26px; font-size: 12px; letter-spacing: 0; text-transform: none; }
+.phone-dock-head a, .phone-dock-head button {
+  width: 30px; height: 30px; flex-shrink: 0; display: grid; place-items: center; border-radius: 8px; border: none;
+  background: rgba(255, 255, 255, 0.05); color: var(--muted); text-decoration: none; font-size: 16px;
+}
+.phone-dock-head a:hover, .phone-dock-head button:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.phone.ringing { animation: phone-buzz 1.3s ease-in-out infinite; }
+@keyframes phone-buzz {
+  0%, 60%, 100% { transform: none; }
+  64%, 72%, 80% { transform: translateX(-3px) rotate(-0.6deg); }
+  68%, 76%, 84% { transform: translateX(3px) rotate(0.6deg); }
+}
+.btn-ghost.phone-on { border-color: rgba(255, 138, 76, 0.45); color: var(--ember-soft); }
+@media (prefers-reduced-motion: reduce) { .phone.ringing { animation: none; } }
