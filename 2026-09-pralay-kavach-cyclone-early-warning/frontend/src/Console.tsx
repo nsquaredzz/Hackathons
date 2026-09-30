@@ -4,7 +4,7 @@ import { LivePanel } from './Live'
 import MapView from './MapView'
 import WindParticles from './WindParticles'
 import { CommandPanel, DispatchPanel, PlanPanels, RiskPanel, VerifyPanel } from './Panels'
-import { api, fmtT, liveApi, runAgent, type AgentStep, type Asset, type Health, type HelpRequest, type LiveOverview, type LngLat, type Plan, type Report, type Risk, type StormState, type WindField } from './api'
+import { api, apiUrl, fmtT, liveApi, runAgent, type AgentStep, type Asset, type Health, type HelpRequest, type LiveOverview, type LngLat, type Plan, type Report, type Risk, type StormState, type WindField } from './api'
 
 export type Tab = 'live' | 'command' | 'risk' | 'plan' | 'dispatch' | 'verify'
 const TABS: [Tab, string][] = [['live', 'Live'], ['command', 'Replay'], ['risk', 'Risk'], ['plan', 'Plan'], ['dispatch', 'Dispatch'], ['verify', 'Verify']]
@@ -43,7 +43,7 @@ export default function Console() {
   useEffect(() => {
     api.health().then(setHealth).catch((e) => setError(`Backend not reachable: ${e.message}`))
     api.meta().then(setMeta).catch(() => {})
-    fetch('/api/assets').then((r) => r.json()).then(setAllAssets).catch(() => {})
+    fetch(apiUrl('/api/assets')).then((r) => r.json()).then(setAllAssets).catch(() => {})
     api.plan().then(setPlan).catch(() => {})
   }, [])
 
@@ -163,8 +163,8 @@ export default function Console() {
         floodCorners={meta?.flood_corners ?? null}
         satellite={layers.satellite && (tab === 'command' || tab === 'risk')}
         satelliteCorners={meta?.satellite_corners ?? null}
-        observedUrl={tab === 'verify' && health?.data['observed_flood.npz'] ? '/api/layers/observed.png' : null}
-        waterlogUrl={health?.data['hydro.npz'] && ((tab === 'risk' && layers.waterlog) || tab === 'verify') ? '/api/layers/waterlogging.png' : null}
+        observedUrl={tab === 'verify' && health?.data['observed_flood.npz'] ? apiUrl('/api/layers/observed.png') : null}
+        waterlogUrl={health?.data['hydro.npz'] && ((tab === 'risk' && layers.waterlog) || tab === 'verify') ? apiUrl('/api/layers/waterlogging.png') : null}
         baseAssets={showRiskLayers && layers.assets ? allAssets : []}
         atRisk={showRiskLayers && risk ? risk.assets_at_risk : []}
         cutRoads={showRiskLayers && layers.roads && risk ? risk.cut_roads : []}
@@ -211,7 +211,7 @@ export default function Console() {
             </span>
           )}
           <button className="btn-ghost" style={{ height: 36, fontSize: 13 }} title="Clear the plan, advisories and reports"
-            onClick={async () => { await fetch('/api/reset', { method: 'POST' }); setPlan(null); setSteps([]); setSelected(null); setReports([]); setHelp([]); setTab('live'); setT(-48) }}>Reset</button>
+            onClick={async () => { await fetch(apiUrl('/api/reset'), { method: 'POST' }); setPlan(null); setSteps([]); setSelected(null); setReports([]); setHelp([]); setTab('live'); setT(-48) }}>Reset</button>
           <a className="btn-ghost" style={{ height: 36, fontSize: 13 }} href="/citizen" target="_blank" rel="noreferrer">Phone ↗</a>
         </div>
       </header>

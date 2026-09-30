@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { LANG_FONT } from './api'
+import { apiUrl, LANG_FONT } from './api'
 
 // Sahayak: talk to it in your language; it answers aloud and gives one-tap actions.
 // Voice uses the phone's own speech engine (Android Chrome speaks and understands Indian languages well);
@@ -91,7 +91,7 @@ export default function Sahayak({ place, initialLang, opening, onClose }: {
     setMsgs((m) => [...m, { role: 'user', text: t }, { role: 'bot', text: '…', pending: true }])
     setBusy(true)
     try {
-      const r = await fetch('/api/bot/chat', {
+      const r = await fetch(apiUrl('/api/bot/chat'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lat: place.lat, lon: place.lon, lang, message: t, history, session: session.current }),
       })

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api, fmtInt, fmtT, LANG_FONT, LANG_LABEL, type Advisory, type AgentStep, type Asset, type Health, type HelpRequest, type Plan, type Risk, type StormState, type Verify } from './api'
+import { api, apiUrl, fmtInt, fmtT, LANG_FONT, LANG_LABEL, type Advisory, type AgentStep, type Asset, type Health, type HelpRequest, type Plan, type Risk, type StormState, type Verify } from './api'
 
 const ist = (iso: string, opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) =>
   new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', ...opts })
@@ -413,7 +413,7 @@ export function DispatchPanel({ plan, risk, onNeedPlan, help = [], onHelp, onFoc
           <span className="chip amber">Replay sends as Exercise</span>
         </div>
         <pre className="cap">{adv?.cap ?? '—'}</pre>
-        {adv && <a className="small" href={`/api/advisory/${district}/cap.xml`} target="_blank" rel="noreferrer">Open CAP XML ↗</a>}
+        {adv && <a className="small" href={apiUrl(`/api/advisory/${district}/cap.xml`)} target="_blank" rel="noreferrer">Open CAP XML ↗</a>}
         <div className="stack">
           <div className="eyebrow">Two-person sign-off</div>
           {APPROVERS.map((who, i) => (

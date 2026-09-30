@@ -12,4 +12,4 @@ to evacuate first. People are warned in their own language through a voice helpe
 
 `Gemini` `Earth Engine` `Cloud Run` `FastAPI` `React` `MapLibre`
 
-→ [Code and README](2026-09-pralay-kavach-cyclone-early-warning/) · [Pitch deck (PDF)](2026-09-pralay-kavach-cyclone-early-warning/docs/Pralay-Kavach-pitch-deck.pdf)
+→ **[Live demo](https://pralay-kavach.web.app)** · [Code and README](2026-09-pralay-kavach-cyclone-early-warning/) · [Pitch deck (PDF)](2026-09-pralay-kavach-cyclone-early-warning/docs/Pralay-Kavach-pitch-deck.pdf)

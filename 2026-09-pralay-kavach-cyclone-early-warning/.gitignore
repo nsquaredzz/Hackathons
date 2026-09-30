@@ -11,3 +11,5 @@ backend/data/live_cache/
 backend/data/backtest_cache/
 backend/data/state.json
 backend/data/*.tmp
+# Firebase CLI cache
+.firebase/

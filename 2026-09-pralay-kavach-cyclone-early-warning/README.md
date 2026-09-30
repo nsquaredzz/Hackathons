@@ -5,6 +5,7 @@ parametric payouts. The prototype replays **Cyclone Fani (Odisha, May 2019)** on
 
 > **Build with AI: Code for Communities** (Google Cloud × Hack2skill) · Track: **Resilience**
 > Built on **Gemini 3.8 Flash** (Google AI Studio), **Google Earth Engine** and **Cloud Run**, all in one Google Cloud project.
+> **Live demo: https://pralay-kavach.web.app** (resident phone view: [/citizen](https://pralay-kavach.web.app/citizen))
 > Pitch deck: [PowerPoint](docs/Pralay-Kavach-pitch-deck.pptx) · [PDF](docs/Pralay-Kavach-pitch-deck.pdf)
 
 ## The problem
@@ -196,14 +197,27 @@ Evacuation also counts destructive wind (≥120 km/h within 20 km of the coast),
 - Routes are straight-line checks, not road routing. The Google Maps Routes API is the next step.
 - Pixel-level overlap with the radar flood map is low (IoU about 0.01–0.02): the observed water is patchy and sparse. Report the held-out lift and the village-level relief list, not pixel IoU.
 
-## Deploy (Cloud Run)
+## Deploy
+
+One Docker image serves the API and the web app; the web app can also be hosted on its own.
+
+**Live demo:** the web app is on **Firebase Hosting** (https://pralay-kavach.web.app). The API container runs from our machine
+behind a Cloudflare tunnel until Cloud Run billing is active. `deploy/live.sh` starts the container and tunnel, then republishes
+the Firebase site pointed at the tunnel:
 
 ```bash
-gcloud run deploy pralay-kavach --source . --region asia-south1 --allow-unauthenticated \
-  --set-env-vars GEMINI_API_KEY=...,GEMINI_MODEL=gemini-3.8-flash
+./deploy/live.sh
 ```
 
-The Dockerfile builds the web app, fetches the open data at build time and serves everything from one FastAPI process.
+**Cloud Run** (web app and API in one container, the intended production setup):
+
+```bash
+gcloud run deploy pralay-kavach --source . --region asia-south1 --allow-unauthenticated --memory 2Gi \
+  --set-env-vars LLM_PROVIDER=gemini,GEMINI_MODEL=gemini-3.8-flash --set-secrets GEMINI_API_KEY=gemini-key:latest
+```
+
+Build the web app with `VITE_API_BASE=<api url>` to host it apart from the API. The image ships the prepared data,
+including the Earth Engine layers, and needs about 1 GB of memory.
 
 ## Data sources
 

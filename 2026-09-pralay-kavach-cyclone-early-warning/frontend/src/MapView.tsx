@@ -2,7 +2,7 @@
 import * as maplibregl from 'maplibre-gl'
 import type { GeoJSONSource, ImageSource, MapLayerMouseEvent } from 'maplibre-gl'
 import { useEffect, useRef, useState } from 'react'
-import type { Asset, Candidate, LngLat, Report, StormState } from './api'
+import { apiUrl, type Asset, type Candidate, type LngLat, type Report, type StormState } from './api'
 
 const STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
 // MapLibre v6 loads its worker as a separate ES module; bundlers don't emit it, so serve a copy
@@ -224,7 +224,7 @@ export default function MapView(p: MapProps) {
   useEffect(() => {
     if (!ready || !p.satelliteCorners) return
     const img = map.current!.getSource('satellite') as ImageSource
-    if (p.satellite) img.updateImage({ url: '/api/layers/satellite.jpg', coordinates: p.satelliteCorners as any })
+    if (p.satellite) img.updateImage({ url: apiUrl('/api/layers/satellite.jpg'), coordinates: p.satelliteCorners as any })
     vis(['satellite'], p.satellite)
   }, [ready, p.satellite, p.satelliteCorners])
 

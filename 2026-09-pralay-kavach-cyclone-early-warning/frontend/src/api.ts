@@ -202,14 +202,18 @@ export interface Verify {
   flood_payout: { trigger: string; villages: number; per_village_inr: number; payout_inr: number } | null
 }
 
+// Same origin by default. Set VITE_API_BASE when the web app is hosted apart from the API (Firebase Hosting + Hugging Face).
+export const API_BASE = ((import.meta.env.VITE_API_BASE as string | undefined) ?? '').replace(/\/$/, '')
+export const apiUrl = (path: string) => API_BASE + path
+
 async function get<T>(path: string): Promise<T> {
-  const r = await fetch(path)
+  const r = await fetch(apiUrl(path))
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`)
   return r.json()
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const r = await fetch(apiUrl(path), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   if (!r.ok) {
     const detail = await r.json().catch(() => ({}))
     throw new Error(detail.detail || `${r.status}`)
@@ -240,17 +244,17 @@ export const api = {
     }
     fd.append('depth', depth)
     if (photo) fd.append('photo', photo)
-    const r = await fetch('/api/citizen/report', { method: 'POST', body: fd })
+    const r = await fetch(apiUrl('/api/citizen/report'), { method: 'POST', body: fd })
     if (!r.ok) throw new Error(await r.text())
     return (await r.json()) as { report: Report; shelter: Shelter | null }
   },
   help: () => get<HelpRequest[]>('/api/help'),
   updateHelp: (id: string, status: string) => post<HelpRequest>(`/api/help/${id}`, { status }),
-  floodUrl: (t: number, scenario: string) => `/api/layers/flood.png?t=${t}&scenario=${scenario}`,
+  floodUrl: (t: number, scenario: string) => apiUrl(`/api/layers/flood.png?t=${t}&scenario=${scenario}`),
 }
 
 export function runAgent(t: number, onEvent: (ev: any) => void): () => void {
-  const es = new EventSource(`/api/agent/run?t=${t}`)
+  const es = new EventSource(apiUrl(`/api/agent/run?t=${t}`))
   es.onmessage = (m) => {
     const ev = JSON.parse(m.data)
     onEvent(ev)

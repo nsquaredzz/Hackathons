@@ -1,5 +1,12 @@
 backend/.venv
 frontend/node_modules
 frontend/dist
-backend/data
+frontend/public/maplibre
 .env
+**/__pycache__
+backend/data/live_cache
+backend/data/backtest_cache
+backend/data/state.json
+promo-video
+docs
+.claude
