@@ -1,0 +1,13 @@
+.env
+backend/.venv/
+__pycache__/
+*.pyc
+frontend/node_modules/
+frontend/dist/
+.DS_Store
+public/maplibre/
+# Runtime caches and demo state (regenerated on the fly)
+backend/data/live_cache/
+backend/data/backtest_cache/
+backend/data/state.json
+backend/data/*.tmp

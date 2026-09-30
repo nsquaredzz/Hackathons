@@ -1,0 +1,100 @@
+{
+ "method": "Rules chosen on 2024 (train) and scored on 2025-26 (test), using GFS and ECMWF forecasts as issued 1-5 days ahead. A hit counts within 300 km of the real storm (IBTrACS); a flag is real if it matches any IBTrACS depression or storm, including up to 48 h before it was first tracked.",
+ "rule": {
+  "max_pressure_hpa": 1004,
+  "min_wind_kmh": 50,
+  "min_deficit_hpa": 0,
+  "min_duration_h": 12,
+  "run_to_run_consistency": false,
+  "ecmwf_agreement": true
+ },
+ "thresholds": {
+  "pressure_hpa_max": 1004,
+  "wind_kmh_min": 50,
+  "match_km": 300
+ },
+ "storms": [
+  {
+   "storm": "Remal",
+   "first_tracked": "2024-05-23T12:00:00",
+   "landfall": "2024-05-26T15:00:00",
+   "spotted": true,
+   "earliest_forecast_issued": "2024-05-17T00:00:00",
+   "days_before_landfall": 9.6,
+   "days_before_first_tracked": 6.5,
+   "split": "train"
+  },
+  {
+   "storm": "Dana",
+   "first_tracked": "2024-10-21T06:00:00",
+   "landfall": "2024-10-24T21:00:00",
+   "spotted": true,
+   "earliest_forecast_issued": "2024-10-17T21:00:00",
+   "days_before_landfall": 7.0,
+   "days_before_first_tracked": 3.4,
+   "split": "train"
+  },
+  {
+   "storm": "Fengal",
+   "first_tracked": "2024-11-23T18:00:00",
+   "landfall": "2024-12-01T00:00:00",
+   "spotted": true,
+   "earliest_forecast_issued": "2024-11-20T06:00:00",
+   "days_before_landfall": 10.8,
+   "days_before_first_tracked": 3.5,
+   "split": "train"
+  },
+  {
+   "storm": "Montha",
+   "first_tracked": "2025-10-25T00:00:00",
+   "landfall": "2025-10-28T21:00:00",
+   "spotted": true,
+   "earliest_forecast_issued": "2025-10-21T18:00:00",
+   "days_before_landfall": 7.1,
+   "days_before_first_tracked": 3.2,
+   "split": "test"
+  },
+  {
+   "storm": "Ditwah",
+   "first_tracked": "2025-11-26T18:00:00",
+   "landfall": "2025-11-27T12:00:00",
+   "spotted": false,
+   "split": "test"
+  },
+  {
+   "storm": "ONE-26 (Sep 2026)",
+   "first_tracked": "2026-09-22T18:00:00",
+   "landfall": "2026-09-24T00:00:00",
+   "spotted": true,
+   "earliest_forecast_issued": "2026-09-19T00:00:00",
+   "days_before_landfall": 5.0,
+   "days_before_first_tracked": 3.8,
+   "split": "test"
+  }
+ ],
+ "false_alarm_checks": [
+  {
+   "window": "2024 (rules chosen here)",
+   "flagged": 7,
+   "false_alarms": 0,
+   "lead_days": 5
+  },
+  {
+   "window": "2025-26 (held out)",
+   "flagged": 7,
+   "false_alarms": 0,
+   "lead_days": 5
+  }
+ ],
+ "baseline": {
+  "train": {
+   "flagged": 31,
+   "false_alarms": 16
+  },
+  "test": {
+   "flagged": 34,
+   "false_alarms": 18
+  }
+ },
+ "run": "2026-09-29T13:17:09.143535+00:00"
+}

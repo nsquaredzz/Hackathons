@@ -1,0 +1,13 @@
+fastapi==0.141.1
+uvicorn[standard]==0.54.0
+numpy==2.5.3
+scipy==1.18.1
+pillow==12.3.0
+httpx==0.28.1
+pydantic==2.13.5
+python-dotenv==1.2.3
+python-multipart==0.0.32
+google-genai==2.25.0
+anthropic==1.9.0
+# Only for pipeline/gee_precompute.py:
+# earthengine-api
