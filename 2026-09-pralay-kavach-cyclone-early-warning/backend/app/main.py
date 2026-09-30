@@ -20,7 +20,7 @@ from pydantic import BaseModel
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-from . import advisory, agent, bot, citizen, exposure, guide, live, llm, rainflood, storm, store, surge, validate  # noqa: E402
+from . import advisory, agent, bot, citizen, exposure, guide, live, llm, rainflood, storm, store, surge, tts, validate  # noqa: E402
 from .geo import DATA, grid, lonlat_to_merc  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
@@ -251,6 +251,21 @@ def bot_chat(turn: BotTurn):
     if not turn.message.strip():
         raise HTTPException(400, "empty message")
     return bot.chat(turn.lat, turn.lon, turn.lang, turn.message.strip()[:600], turn.history, turn.session)
+
+
+@app.get("/api/tts")
+def speak(text: str = Query(..., max_length=700), lang: str = "en", bg: bool = False):
+    """The phone's voice: Gemini TTS audio for a line of text, cached so each line is generated once.
+    `bg=1` marks lines generated ahead of time; they give way to lines someone is waiting to hear."""
+    audio = tts.speech(text, lang, background=bg)
+    if audio is None:
+        raise HTTPException(503, "voice unavailable; use the device voice")
+    return Response(audio, media_type="audio/wav", headers={"Cache-Control": "public, max-age=604800"})
+
+
+@app.get("/api/tts/status")
+def speak_status():
+    return {"available": tts.available(), "voice": tts.VOICE, "models": tts.MODELS}
 
 
 @app.get("/api/guide/route")

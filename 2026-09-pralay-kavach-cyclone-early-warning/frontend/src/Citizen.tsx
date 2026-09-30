@@ -4,7 +4,8 @@ import { loadProfile, NEEDS_VEHICLE, saveProfile, suggestLang, t, type Profile }
 import Navigate from './Navigate'
 import Onboarding from './Onboarding'
 import { GustBars } from './Live'
-import Sahayak, { speak as sayAloud } from './Sahayak'
+import Sahayak from './Sahayak'
+import { prefetchSpeech, speak as sayAloud } from './voice'
 
 export { PRESETS, type Place } from './places'
 import { PRESETS, type Place } from './places'
@@ -143,11 +144,22 @@ export function PhoneApp({ place, onPlace, onDistrict, replay = false }: {
   const needsVehicle = household.some((n) => NEEDS_VEHICLE.includes(n))
   const font = LANG_FONT[lang]
 
-  const readAlert = (a: Advisory) => {
+  const alertSpeech = (a: Advisory) => {
     const l = a.texts[lang]?.body ? lang : a.languages.find((x) => x !== 'en' && a.texts[x]?.body) ?? 'en'
-    const x = a.texts[l], en = a.texts.en
-    if (!sayAloud(`${x.headline}. ${x.body}`, l) && en?.body) sayAloud(`${en.headline}. ${en.body}`, 'en')
+    const x = a.texts[l]
+    return { l, line: `${x.headline}. ${x.body}` }
   }
+  const readAlert = (a: Advisory) => {
+    const { l, line } = alertSpeech(a)
+    const en = a.texts.en
+    sayAloud(line, l, 15000).then((ok) => { if (!ok && l !== 'en' && en?.body) sayAloud(`${en.headline}. ${en.body}`, 'en') })
+  }
+  // While the phone rings, have the voice ready so the warning plays the moment the call is answered.
+  useEffect(() => {
+    if (!ringing) return
+    const { l, line } = alertSpeech(ringing)
+    prefetchSpeech([line], l)
+  }, [ringing?.id])
   const askVehicle = async () => {
     setVehicle('sending')
     try {

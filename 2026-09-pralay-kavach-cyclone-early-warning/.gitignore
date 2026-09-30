@@ -13,3 +13,4 @@ backend/data/state.json
 backend/data/*.tmp
 # Firebase CLI cache
 .firebase/
+backend/data/tts_cache/

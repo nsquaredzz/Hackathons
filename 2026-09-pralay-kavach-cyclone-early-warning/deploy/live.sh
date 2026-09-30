@@ -16,8 +16,11 @@ until curl -sf "localhost:$PORT/api/health" >/dev/null; do sleep 2; done
 pkill -f "cloudflared tunnel --no-autoupdate --url http://localhost:$PORT" || true
 nohup cloudflared tunnel --no-autoupdate --url "http://localhost:$PORT" >"$LOG" 2>&1 & disown
 URL=""
-for _ in $(seq 1 60); do URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$LOG" | head -1 || true); [ -n "$URL" ] && break; sleep 1; done
+for _ in $(seq 1 60); do URL=$(grep -aoE 'https://[a-z0-9-]+\.trycloudflare\.com' "$LOG" | tail -1 || true); [ -n "$URL" ] && break; sleep 1; done
 [ -n "$URL" ] || { echo "tunnel did not start; see $LOG"; exit 1; }
+# Never publish a web app pointing at an API that does not answer.
+for _ in $(seq 1 60); do curl -sf --max-time 10 "$URL/api/health" >/dev/null && break; sleep 3; done
+curl -sf --max-time 10 "$URL/api/health" >/dev/null || { echo "API not reachable through $URL; not publishing"; exit 1; }
 # Keep the Mac from idle-sleeping for as long as the tunnel runs.
 nohup caffeinate -ims -w "$(pgrep -f "cloudflared tunnel --no-autoupdate --url http://localhost:$PORT" | head -1)" >/dev/null 2>&1 & disown
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiUrl, LANG_FONT } from './api'
+import { serverVoice, speak, stopSpeaking, voiceReady } from './voice'
 
 // Sahayak: talk to it in your language; it answers aloud and gives one-tap actions.
 // Voice uses the phone's own speech engine (Android Chrome speaks and understands Indian languages well);
@@ -41,19 +42,8 @@ function loadContacts(): Contact[] {
   try { return JSON.parse(localStorage.getItem('pk-contacts') || '[]') } catch { return [] }
 }
 
-export function speak(text: string, lang: string): boolean {
-  const synth = window.speechSynthesis
-  if (!synth) return false
-  synth.cancel()
-  const code = SPEECH[lang] ?? 'en-IN'
-  const voice = synth.getVoices().find((v) => v.lang.replace('_', '-').toLowerCase().startsWith(code.slice(0, 2)))
-  const u = new SpeechSynthesisUtterance(text)
-  u.lang = code
-  if (voice) u.voice = voice
-  u.rate = 0.95
-  synth.speak(u)
-  return !!voice
-}
+// Speech goes through the shared voice (Gemini TTS, device voice as fallback).
+export { speak } from './voice'
 
 export default function Sahayak({ place, initialLang, opening, onClose }: {
   place: { lat: number; lon: number; name: string }
@@ -67,6 +57,8 @@ export default function Sahayak({ place, initialLang, opening, onClose }: {
   const [listening, setListening] = useState(false)
   const [busy, setBusy] = useState(false)
   const [noVoice, setNoVoice] = useState(false)
+  const [gemini, setGemini] = useState(serverVoice())
+  useEffect(() => { voiceReady.then(setGemini) }, [])
   const [contacts, setContacts] = useState<Contact[]>(loadContacts)
   const [editContacts, setEditContacts] = useState(false)
   const rec = useRef<any>(null)
@@ -127,7 +119,7 @@ export default function Sahayak({ place, initialLang, opening, onClose }: {
     r.onerror = (e: any) => { setListening(false); if (e.error === 'language-not-supported') alert('This browser cannot listen in this language yet. Type instead, or switch language.') }
     r.onend = () => { setListening(false); if (finalText.trim()) send(finalText) }
     rec.current = r
-    window.speechSynthesis?.cancel()
+    stopSpeaking()
     setListening(true)
     r.start()
   }
@@ -185,7 +177,7 @@ export default function Sahayak({ place, initialLang, opening, onClose }: {
             {QUICK.map((q) => <button key={q} className="pill-btn" style={{ height: 36, fontSize: 13 }} onClick={() => send(q)}>{q}</button>)}
           </div>
         )}
-        {noVoice && <div style={{ fontSize: 11.5, color: '#8a5a00', background: '#fff4dc', padding: '8px 10px', borderRadius: 10 }}>This device has no voice for this language, so replies are shown as text. Android phones with Google speech services read Indian languages aloud.</div>}
+        {noVoice && gemini === false && <div style={{ fontSize: 11.5, color: '#8a5a00', background: '#fff4dc', padding: '8px 10px', borderRadius: 10 }}>This device has no voice for this language, so replies are shown as text. Android phones with Google speech services read Indian languages aloud.</div>}
       </div>
 
       <div style={{ flexShrink: 0, padding: '10px 12px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>

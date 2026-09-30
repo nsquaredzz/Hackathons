@@ -3,7 +3,7 @@ import * as maplibregl from 'maplibre-gl'
 import { apiUrl, LANG_FONT, type Shelter } from './api'
 import { dirName, fmtDist, t } from './i18n'
 import type { Place } from './places'
-import { speak } from './Sahayak'
+import { prefetchSpeech, speak, stopSpeaking } from './voice'
 
 // Walk me to the shelter: a real walking route, one big arrow, the next turn in the person's language, spoken aloud,
 // and a warning before any stretch the forecast floods or residents reported under water.
@@ -63,16 +63,20 @@ function bearing(a: [number, number], b: [number, number]) {
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
 }
 
-function phrase(lang: string, s: Step) {
+function turnWord(lang: string, s: Step) {
   const m = s.modifier ?? ''
   const key = m.includes('uturn') ? 'uturn' : m.includes('slight left') ? 'slightLeft' : m.includes('slight right') ? 'slightRight'
     : m.includes('left') ? 'turnLeft' : m.includes('right') ? 'turnRight' : 'straight'
-  return t(lang, key) + (s.name ? ` (${s.name})` : '')
+  return t(lang, key)
+}
+/** On screen the street name helps; spoken, the short phrase is the same on every route, so its audio is reused. */
+function phrase(lang: string, s: Step) {
+  return turnWord(lang, s) + (s.name ? ` (${s.name})` : '')
 }
 
-/** Speak in the person's language; if the device has no voice for it, say the same thing in English. */
-function say(lang: string, text: string, english: string) {
-  if (!speak(text, lang) && lang !== 'en') speak(english, 'en')
+/** Speak in the person's language (Gemini voice); if that fails and the device has no voice for it, say it in English. */
+function say(lang: string, text: string, english: string, waitMs = 2500) {
+  speak(text, lang, waitMs).then((ok) => { if (!ok && lang !== 'en') speak(english, 'en') })
 }
 
 export default function Navigate({ lang, from, shelter, replay, onBack, onArrived, onTellFamily }: {
@@ -140,6 +144,26 @@ export default function Navigate({ lang, from, shelter, replay, onBack, onArrive
 
   useEffect(() => { me.current?.setLngLat(pos); if (walking) map.current?.easeTo({ center: pos, duration: 300 }) }, [pos])
 
+  // The spoken lines are fixed per route (not per metre), so they can all be generated before the walk starts.
+  const lines = useMemo(() => {
+    if (!line) return null
+    const startDir = bearing([from.lon, from.lat], line.pointAt(30))
+    const mk = (l: string) => ({
+      start: `${t(l, 'toShelter', { name: shelter.name })}. ${t(l, 'head', { dir: dirName(l, startDir) })}.`,
+      soon: (s: Step) => `${t(l, 'thenIn', { d: fmtDist(l, 50) })}, ${turnWord(l, s)}`,
+      now: (s: Step) => turnWord(l, s),
+      arrive: t(l, 'arrive', { name: shelter.name }),
+      wet: (w: Wet) => t(l, w.source === 'report' ? 'water' : 'waterForecast', { d: fmtDist(l, 200) }),
+    })
+    return { local: mk(lang), en: mk('en') }
+  }, [line, lang, shelter.name])
+  useEffect(() => {
+    if (!lines || !line || !route) return
+    const turns = line.steps.filter((s) => s.type !== 'depart' && s.type !== 'arrive')
+    prefetchSpeech([lines.local.start, ...turns.flatMap((s) => [lines.local.soon(s), lines.local.now(s)]), ...route.wet.map(lines.local.wet), lines.local.arrive], lang)
+  }, [lines])
+  useEffect(() => () => stopSpeaking(), [])
+
   // Where am I on the route, what comes next.
   const at = line ? line.along(pos[0], pos[1]).at : 0
   const left = line ? Math.max(0, line.total - at) : 0
@@ -152,30 +176,30 @@ export default function Navigate({ lang, from, shelter, replay, onBack, onArrive
     ? t(lang, 'arriveSoon', { d: fmtDist(lang, left) })
     : `${t(lang, 'thenIn', { d: fmtDist(lang, toNext) })}, ${phrase(lang, next)}`
 
-  // Voice: once at the start, before each turn, near water, and on arrival.
+  // Voice: when the walk starts, before each turn, near water, and on arrival.
+  const started = walking || at > 15
   useEffect(() => {
-    if (!line || !route) return
-    const once = (key: string, text: string, english: string) => {
+    if (!line || !lines) return
+    const L = lines
+    const once = (key: string, pick: (v: typeof L.local) => string, waitMs?: number) => {
       if (spoken.current.has(key)) return
       spoken.current.add(key)
-      say(lang, text, english)
+      say(lang, pick(L.local), pick(L.en), waitMs)
     }
     if (left < 15) {
       if (!arrived) { setArrived(true); setWalking(false) }
-      once('arrive', t(lang, 'arrive', { name: shelter.name }), t('en', 'arrive', { name: shelter.name }))
+      once('arrive', (v) => v.arrive, 6000)
       return
     }
-    once('start', `${t(lang, 'toShelter', { name: shelter.name })}. ${t(lang, 'head', { dir: dirName(lang, heading) })}. ${instruction}`,
-      `${t('en', 'toShelter', { name: shelter.name })}. ${t('en', 'head', { dir: dirName('en', heading) })}.`)
-    if (wetAhead) {
-      const k = wetAhead.source === 'report' ? 'water' : 'waterForecast'
-      once(`wet${wetAhead.at_m}`, t(lang, k, { d: fmtDist(lang, wetAhead.at_m - at) }), t('en', k, { d: fmtDist('en', wetAhead.at_m - at) }))
-    }
+    if (!started) return
+    once('start', (v) => v.start, 6000)
+    const wet = route?.wet.find((w) => w.at_m > at && w.at_m - at < 200)
+    if (wet) once(`wet${wet.at_m}`, (v) => v.wet(wet))
     if (next && next.type !== 'arrive') {
-      if (toNext < 120 && toNext > 35) once(`soon${next.at}`, instruction, `${t('en', 'thenIn', { d: fmtDist('en', toNext) })}, ${phrase('en', next)}`)
-      if (toNext <= 35) once(`now${next.at}`, phrase(lang, next), phrase('en', next))
+      if (toNext <= 70 && toNext > 30) once(`soon${next.at}`, (v) => v.soon(next))
+      if (toNext <= 30) once(`now${next.at}`, (v) => v.now(next))
     }
-  }, [Math.round(at / 5), line])
+  }, [Math.round(at / 5), line, lines, started])
 
   // Simulated walk for the replay and for demos: about 25 seconds from door to shelter.
   useEffect(() => {
@@ -193,7 +217,7 @@ export default function Navigate({ lang, from, shelter, replay, onBack, onArrive
   return (
     <div className="walk" style={{ fontFamily: font }}>
       <header>
-        <button onClick={() => { window.speechSynthesis?.cancel(); onBack() }} aria-label={t(lang, 'back')} className="walk-back">
+        <button onClick={() => { stopSpeaking(); onBack() }} aria-label={t(lang, 'back')} className="walk-back">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#13181c" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5 8 12l7 7" /></svg>
         </button>
         <span className="stack" style={{ gap: 2, minWidth: 0 }}>

@@ -10,3 +10,4 @@ backend/data/state.json
 promo-video
 docs
 .claude
+backend/data/tts_cache

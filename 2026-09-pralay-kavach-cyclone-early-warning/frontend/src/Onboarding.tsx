@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { LANG_FONT } from './api'
 import { HOUSEHOLD, LANG_EN, LANG_NAME, LANGS, t, type Lang, type Need, type Profile } from './i18n'
 import { PRESETS, type Place } from './places'
-import { speak } from './Sahayak'
+import { speak } from './voice'
 
 // Three taps and the phone speaks the person's language, knows where they are and who they are looking after.
 
