@@ -3,6 +3,7 @@ import type { Map as MLMap } from 'maplibre-gl'
 import { LivePanel } from './Live'
 import MapView from './MapView'
 import WindParticles from './WindParticles'
+import Guide from './Guide'
 import { CommandPanel, DispatchPanel, PlanPanels, RiskPanel, VerifyPanel } from './Panels'
 import { api, apiUrl, fmtT, liveApi, runAgent, type AgentStep, type Asset, type Health, type HelpRequest, type LiveOverview, type LngLat, type Plan, type Report, type Risk, type StormState, type WindField } from './api'
 
@@ -39,6 +40,9 @@ export default function Console() {
   const [help, setHelp] = useState<HelpRequest[]>([])
   const [error, setError] = useState<string | null>(null)
   const stopAgent = useRef<() => void>(() => {})
+  // Judges' guide: opens on the first visit; the choice is remembered per browser.
+  const [guide, setGuide] = useState(() => { try { return localStorage.getItem('pk-guide') !== 'closed' } catch { return true } })
+  const toggleGuide = (open: boolean) => { setGuide(open); try { localStorage.setItem('pk-guide', open ? 'open' : 'closed') } catch { /* private mode */ } }
 
   useEffect(() => {
     api.health().then(setHealth).catch((e) => setError(`Backend not reachable: ${e.message}`))
@@ -210,6 +214,7 @@ export default function Console() {
               {health.llm.label}
             </span>
           )}
+          {!guide && <button className="btn-ghost guide-open" onClick={() => toggleGuide(true)}>Guide</button>}
           <button className="btn-ghost" style={{ height: 36, fontSize: 13 }} title="Clear the plan, advisories and reports"
             onClick={async () => { await fetch(apiUrl('/api/reset'), { method: 'POST' }); setPlan(null); setSteps([]); setSelected(null); setReports([]); setHelp([]); setTab('live'); setT(-48) }}>Reset</button>
           <a className="btn-ghost" style={{ height: 36, fontSize: 13 }} href="/citizen" target="_blank" rel="noreferrer">Phone ↗</a>
@@ -312,6 +317,8 @@ export default function Console() {
       {tab === 'dispatch' && <DispatchPanel plan={plan} risk={risk} onNeedPlan={() => setTab('plan')} help={help}
         onHelp={async (id, status) => { await api.updateHelp(id, status); api.help().then(setHelp) }} onFocus={(lon, lat) => setFocus([lon, lat])} />}
       {tab === 'verify' && <VerifyPanel health={health} onFocus={(lon, lat) => setFocus([lon, lat])} />}
+
+      {guide && <Guide tab={tab} setTab={setTab} onReplay={() => { setT(-72); setPlaying(true) }} onClose={() => toggleGuide(false)} />}
     </div>
   )
 }
