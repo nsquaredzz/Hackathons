@@ -57,8 +57,8 @@ export async function speak(text: string, lang: string, waitMs = 9000): Promise<
   const mine = turn
   const line = text.trim()
   if (!line) return true
-  await voiceReady
-  if (serverOk) {
+  // Always ask the server: cached lines play even when Gemini is over quota, and a refusal comes back in milliseconds.
+  {
     const url = await Promise.race([clip(line, lang), new Promise<null>((r) => setTimeout(() => r(null), waitMs))])
     if (mine !== turn) return true // something newer is being said
     if (url) {

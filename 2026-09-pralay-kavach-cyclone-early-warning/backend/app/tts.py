@@ -28,11 +28,13 @@ URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateC
 _lock = threading.Lock()
 _last_call = 0.0
 _people_waiting = 0  # lines someone is waiting to hear right now; background work gives way to them
+_cool_until = 0.0  # after a quota refusal, don't ask Gemini again for a while: the phone uses its own voice at once
+COOL_OFF = float(os.getenv("TTS_COOL_OFF", "600"))
 _count = threading.Lock()
 
 
 def available() -> bool:
-    return bool(os.getenv("GEMINI_API_KEY"))
+    return bool(os.getenv("GEMINI_API_KEY")) and time.time() >= _cool_until
 
 
 def _path(text: str, lang: str):
@@ -53,7 +55,7 @@ def speech(text: str, lang: str, background: bool = False) -> bytes | None:
     if path.exists():
         return path.read_bytes()
     if not available() or not text:
-        return None
+        return None  # includes the cool-off after a quota refusal; cached lines above still play
     if background:
         while _people_waiting:
             time.sleep(0.2)
@@ -69,10 +71,13 @@ def speech(text: str, lang: str, background: bool = False) -> bytes | None:
 
 
 def _generate(text: str, path) -> bytes | None:
-    global _last_call
+    global _last_call, _cool_until
     with _lock:  # one Gemini call at a time, spaced out
         if path.exists():
             return path.read_bytes()
+        if time.time() < _cool_until:
+            return None
+        refused = 0
         wait = MIN_GAP - (time.time() - _last_call)
         if wait > 0:
             time.sleep(wait)
@@ -95,6 +100,10 @@ def _generate(text: str, path) -> bytes | None:
                 path.write_bytes(audio)
                 return audio
             log.warning("tts %s: %s", model, r.status_code)
+            refused += r.status_code == 429
             if r.status_code not in (429, 500, 503):
                 break
+        if refused == len(MODELS):
+            _cool_until = time.time() + COOL_OFF
+            log.warning("tts: every model is over quota; using device voices for %.0f s", COOL_OFF)
     return None
