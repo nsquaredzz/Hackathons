@@ -67,7 +67,8 @@ const STEPS: Step[] = [
   {
     tab: 'dispatch', kicker: '6 · Resident', title: 'The phone rings',
     body: 'Answer the call: the warning is read aloud, then the phone shows this person\'s own shelter and whether the route there stays dry.',
-    try: 'After answering, tap "Talk to Sahayak" and type: "Water is coming into my house". It puts Call 112 first and sends a rescue request to this console (watch the SOS badge).',
+    look: ['The phone adapts to its owner: a 3-tap setup picks their language (six Indian languages), place and who is at home, and every screen and tip follows.'],
+    try: 'After answering, tap "Guide me there" and then "Show me the walk": a real walking route, turn-by-turn in the resident\'s language, spoken aloud, with water warnings. Or tap "I need help" and type "Water is coming into my house" to see the SOS arrive here.',
     target: () => document.querySelector('.phone-dock') ?? byText('.topbar-right button', 'Phone'),
   },
   {

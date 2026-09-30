@@ -20,7 +20,7 @@ from pydantic import BaseModel
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-from . import advisory, agent, bot, citizen, exposure, live, llm, rainflood, storm, store, surge, validate  # noqa: E402
+from . import advisory, agent, bot, citizen, exposure, guide, live, llm, rainflood, storm, store, surge, validate  # noqa: E402
 from .geo import DATA, grid, lonlat_to_merc  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
@@ -251,6 +251,28 @@ def bot_chat(turn: BotTurn):
     if not turn.message.strip():
         raise HTTPException(400, "empty message")
     return bot.chat(turn.lat, turn.lon, turn.lang, turn.message.strip()[:600], turn.history, turn.session)
+
+
+@app.get("/api/guide/route")
+def guide_route(lat: float, lon: float, to_lat: float, to_lon: float):
+    """Walking route to a shelter with turn-by-turn steps and the flooded spots along it."""
+    return guide.walk(lat, lon, to_lat, to_lon)
+
+
+class HelpAsk(BaseModel):
+    lat: float
+    lon: float
+    need: str = "transport"
+    people: int | None = None
+    note: str = ""
+    lang: str = "en"
+    household: list[str] = []
+
+
+@app.post("/api/help/request")
+def help_request(body: HelpAsk):
+    """A resident asks for a vehicle or rescue from the phone; it appears in the control room's SOS list."""
+    return guide.request_help(body.lat, body.lon, body.need, body.people, body.note, body.lang, body.household)
 
 
 @app.get("/api/help")

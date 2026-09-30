@@ -1,32 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { api, LANG_FONT, liveApi, type Advisory, type Outlook, type Report, type Shelter } from './api'
+import { api, apiUrl, LANG_FONT, liveApi, type Advisory, type Outlook, type Report, type Shelter } from './api'
+import { loadProfile, NEEDS_VEHICLE, saveProfile, suggestLang, t, type Profile } from './i18n'
+import Navigate from './Navigate'
+import Onboarding from './Onboarding'
 import { GustBars } from './Live'
-import Sahayak, { AFTER_ALERT, speak as sayAloud } from './Sahayak'
+import Sahayak, { speak as sayAloud } from './Sahayak'
 
-export type Place = { name: string; lat: number; lon: number }
-
-export const PRESETS: Place[] = [
-  { name: 'Puri town', lat: 19.8106, lon: 85.8314 },
-  { name: 'Konark', lat: 19.8876, lon: 86.0945 },
-  { name: 'Satapada', lat: 19.6700, lon: 85.4400 },
-  { name: 'Gopalpur, Ganjam', lat: 19.2586, lon: 84.9056 },
-  { name: 'Paradip', lat: 20.3165, lon: 86.6114 },
-]
+export { PRESETS, type Place } from './places'
+import { PRESETS, type Place } from './places'
 const DEPTHS = [['ankle', 'Ankle'], ['knee', 'Knee'], ['waist', 'Waist'], ['higher', 'Higher']] as const
-const SPEECH_LANG: Record<string, string> = { en: 'en-IN', or: 'or-IN', te: 'te-IN', bn: 'bn-IN', ta: 'ta-IN' }
-
-function speak(text: string, lang: string) {
-  const synth = window.speechSynthesis
-  if (!synth) return
-  synth.cancel()
-  const u = new SpeechSynthesisUtterance(text)
-  const voice = synth.getVoices().find((v) => v.lang.toLowerCase().startsWith(SPEECH_LANG[lang].slice(0, 2)))
-  u.lang = voice ? voice.lang : 'en-IN'
-  if (voice) u.voice = voice
-  u.rate = 0.95
-  synth.speak(u)
-}
-
 export default function Citizen() {
   const params = new URLSearchParams(location.search)
   const initial = params.get('lat')
@@ -56,7 +38,7 @@ export default function Citizen() {
         </label>
         <div className="small muted">District: {district || '…'} · {place.lat.toFixed(3)}, {place.lon.toFixed(3)}</div>
       </div>
-      <PhoneApp place={place} onDistrict={setDistrict} />
+      <PhoneApp place={place} onDistrict={setDistrict} onPlace={(p) => { setPlaces((cur) => (cur.some((c) => c.name === p.name) ? cur : [p, ...cur])); setPlace(p) }} />
     </div>
   )
 }
@@ -90,16 +72,21 @@ function useRingtone(on: boolean) {
   }, [on])
 }
 
-/** The resident's phone. `replay` puts it in the Cyclone Fani story (used when it is docked in the console). */
-export function PhoneApp({ place, onDistrict, replay = false }: { place: Place; onDistrict?: (d: string) => void; replay?: boolean }) {
+/** The resident's phone. It adapts to the person (language, household) and, with `replay`, sits in the Cyclone Fani story. */
+export function PhoneApp({ place, onPlace, onDistrict, replay = false }: {
+  place: Place; onPlace?: (p: Place) => void; onDistrict?: (d: string) => void; replay?: boolean
+}) {
+  const [profile, setProfile] = useState<Profile | null>(loadProfile)
+  const [setup, setSetup] = useState(!profile)
   const [district, setDistrict] = useState('')
+  const lang = profile?.lang ?? suggestLang(district)
   const [alerts, setAlerts] = useState<Advisory[]>([])
   const [shelter, setShelter] = useState<Shelter | null>(null)
-  const [screen, setScreen] = useState<'chat' | 'report' | 'bot'>('chat')
+  const [screen, setScreen] = useState<'chat' | 'report' | 'bot' | 'guide'>('chat')
   const [ringing, setRinging] = useState<Advisory | null>(null)
-  const [botOpening, setBotOpening] = useState<{ role: 'bot'; text: string }[] | undefined>(undefined)
   const [english, setEnglish] = useState(false)
   const [reached, setReached] = useState(false)
+  const [vehicle, setVehicle] = useState<'idle' | 'sending' | 'sent'>('idle')
   const [lastReport, setLastReport] = useState<Report | null>(null)
   const [outlook, setOutlook] = useState<Outlook | null>(null)
 
@@ -111,7 +98,7 @@ export function PhoneApp({ place, onDistrict, replay = false }: { place: Place; 
   }, [place.lat, place.lon])
 
   // A different location is a different person: start their screen fresh.
-  useEffect(() => { setShelter(null); setLastReport(null); setReached(false); setScreen('chat') }, [place.lat, place.lon])
+  useEffect(() => { setShelter(null); setLastReport(null); setReached(false); setVehicle('idle'); setScreen('chat') }, [place.lat, place.lon])
 
   useEffect(() => {
     let live = true
@@ -138,42 +125,109 @@ export function PhoneApp({ place, onDistrict, replay = false }: { place: Place; 
     try { localStorage.setItem('pk-announced', JSON.stringify([...seen, alert.id])) } catch { /* ignore */ }
     setRinging(alert)
   }, [alert?.id])
-  const lang = alert ? alert.languages.find((l) => l !== 'en' && alert.texts[l]?.body) ?? 'en' : 'en'
-  const shown = english ? 'en' : lang
-  const text = alert?.texts[shown]
-
   useRingtone(!!ringing)
+
+  // When an alert is live, warm up the walking map and route so "Guide me there" opens instantly.
+  useEffect(() => {
+    if (!alert || !shelter) return
+    fetch('https://basemaps.cartocdn.com/gl/positron-gl-style/style.json').catch(() => {})
+    fetch(apiUrl(`/api/guide/route?lat=${place.lat}&lon=${place.lon}&to_lat=${shelter.lat}&to_lon=${shelter.lon}`)).catch(() => {})
+  }, [alert?.id, shelter?.id, place.lat, place.lon])
+
+  // Show the alert in the person's own language when the district wrote one, else in the district's language.
+  const alertLang = alert ? (alert.texts[lang]?.body ? lang : alert.languages.find((l) => l !== 'en' && alert.texts[l]?.body) ?? 'en') : 'en'
+  const shown = english ? 'en' : alertLang
+  const text = alert?.texts[shown]
+  const household = profile?.household ?? []
+  const tips = ['general', ...household].map((k) => t(lang, `tip_${k}`))
+  const needsVehicle = household.some((n) => NEEDS_VEHICLE.includes(n))
+  const font = LANG_FONT[lang]
+
+  const readAlert = (a: Advisory) => {
+    const l = a.texts[lang]?.body ? lang : a.languages.find((x) => x !== 'en' && a.texts[x]?.body) ?? 'en'
+    const x = a.texts[l], en = a.texts.en
+    if (!sayAloud(`${x.headline}. ${x.body}`, l) && en?.body) sayAloud(`${en.headline}. ${en.body}`, 'en')
+  }
+  const askVehicle = async () => {
+    setVehicle('sending')
+    try {
+      const r = await fetch(apiUrl('/api/help/request'), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat: place.lat, lon: place.lon, need: 'transport', lang, household }) })
+      setVehicle(r.ok ? 'sent' : 'idle')
+      if (r.ok) sayAloud(t(lang, 'vehicleSent'), lang)
+    } catch { setVehicle('idle') }
+  }
+  const tellFamily = () => {
+    const msg = t(lang, 'safeMsg', { shelter: shelter?.name ?? '' })
+    let first = ''
+    try { first = (JSON.parse(localStorage.getItem('pk-contacts') || '[]')[0]?.phone ?? '').replace(/[^\d]/g, '') } catch { /* none saved */ }
+    window.open(`https://wa.me/${first}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener')
+  }
+
+  const settingsButton = (
+    <button onClick={() => setSetup(true)} aria-label={t(lang, 'settings')} title={t(lang, 'settings')}
+      style={{ marginLeft: 'auto', width: 40, height: 40, borderRadius: 20, border: 'none', background: '#f0ece4', fontSize: 18 }}>⚙︎</button>
+  )
 
   return (
       <div className={`phone${ringing ? ' ringing' : ''}`}>
         {ringing && (
-          <IncomingCall district={district} onDecline={() => setRinging(null)} onAnswer={() => {
-            const l = ringing.languages.find((x) => x !== 'en' && ringing.texts[x]?.body) ?? 'en'
-            const t = ringing.texts[l]
-            const follow = AFTER_ALERT[l] ?? AFTER_ALERT.en
-            // Read it in the local language when the device has that voice, otherwise in English.
-            const en = ringing.texts.en
-            if (!sayAloud(`${t.headline}. ${t.body}. ${follow}`, l) && en?.body) sayAloud(`${en.headline}. ${en.body}. ${AFTER_ALERT.en}`, 'en')
-            setBotOpening([{ role: 'bot', text: `${t.headline} ${t.body}` }, { role: 'bot', text: follow }])
+          <IncomingCall lang={lang} district={district} onDecline={() => setRinging(null)} onAnswer={() => {
+            readAlert(ringing)
             setRinging(null)
-            setScreen('bot')
+            setSetup(false)
+            setScreen('chat')
           }} />
         )}
-        {screen === 'bot' ? (
-          <Sahayak place={place} initialLang={alert ? (alert.languages.find((x) => x !== 'en') ?? 'or') : 'or'} opening={botOpening}
-            onClose={() => { setBotOpening(undefined); setScreen('chat') }} />
+        {setup ? (
+          <Onboarding replay={replay} place={place} onPlace={(p) => onPlace?.(p)}
+            initial={profile ?? { lang: suggestLang(district), household: [], done: false }}
+            onDone={(p) => { saveProfile(p); setProfile(p); setSetup(false) }} />
+        ) : screen === 'guide' && shelter ? (
+          <Navigate lang={lang} from={place} shelter={shelter} replay={replay} onBack={() => setScreen('chat')}
+            onArrived={() => { setReached(true); setScreen('chat') }} onTellFamily={tellFamily} />
+        ) : screen === 'bot' ? (
+          <Sahayak place={place} initialLang={lang} opening={undefined} onClose={() => setScreen('chat')} />
         ) : screen === 'chat' ? (
           <>
             <header>
               <span className="brand-mark" style={{ width: 42, height: 42, borderRadius: 21 }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round"><path d="M12 3a9 9 0 1 0 9 9" /><path d="M12 7a5 5 0 1 0 5 5" /></svg></span>
               <span className="stack" style={{ gap: 1 }}>
-                <b style={{ fontSize: 16 }}>Pralay Kavach Alerts</b>
-                <span style={{ fontSize: 12, color: '#5f6a73' }}>{district ? `${district} district · official channel` : 'Connecting…'}</span>
+                <b style={{ fontSize: 16 }}>Pralay Kavach</b>
+                <span style={{ fontSize: 12, color: '#5f6a73' }}>{district ? `${district} · ${place.name}` : '…'}</span>
               </span>
+              {settingsButton}
             </header>
-            <div className="scroll">
+            <div className="scroll" style={{ fontFamily: font }}>
+              {alert && (
+                <div className="act fade-in">
+                  <div className="act-head">⚠ {t(lang, 'officialAlert')} · Cyclone Fani</div>
+                  <div className="act-body">
+                    <div className="act-title">{reached ? `✓ ${t(lang, 'markedSafe')}` : t(lang, 'actNow')}</div>
+                    {shelter && (
+                      <div className="act-line">🏫 <b>{shelter.name}</b> · {t(lang, 'walkMin', { n: Math.max(1, Math.round((shelter.distance_km * 1000) / 75)) })}
+                        <span className={`act-chip${shelter.route === 'dry' ? '' : ' wet'}`}>{shelter.route === 'dry' ? `✓ ${t(lang, 'routeDry')}` : shelter.route}</span>
+                      </div>
+                    )}
+                    <div className="act-line">⏰ {t(lang, 'leaveBy', { time: alert.facts.leave_by_ist })}</div>
+                    {!reached && (
+                      <>
+                        <button className="primary act-go" disabled={!shelter} onClick={() => setScreen('guide')}>🧭 {t(lang, 'guideMe')}</button>
+                        {needsVehicle && (vehicle === 'sent'
+                          ? <div className="act-sent">🚐 {t(lang, 'vehicleSent')}</div>
+                          : <button className="act-vehicle" disabled={vehicle === 'sending'} onClick={askVehicle}>🚐 {t(lang, 'sendVehicle')}</button>)}
+                        <div className="row" style={{ gap: 8 }}>
+                          <button className="pill-btn act-small" onClick={() => readAlert(alert)}>🔊 {t(lang, 'listen')}</button>
+                          <button className="pill-btn act-small hot" onClick={() => setScreen('bot')}>🆘 {t(lang, 'needHelp')}</button>
+                        </div>
+                      </>
+                    )}
+                    {reached && <button className="pill-btn act-small" onClick={tellFamily}>💬 {t(lang, 'tellFamily')}</button>}
+                  </div>
+                </div>
+              )}
               {!alert && replay && (
-                <div className="card fade-in" style={{ width: 326, alignSelf: 'flex-start', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div className="card fade-in" style={{ width: 326, alignSelf: 'flex-start', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 6, fontFamily: 'var(--sans)' }}>
                   <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', color: '#8a5a00' }}>REPLAY · CYCLONE FANI · 2 MAY 2019</span>
                   <span style={{ fontFamily: 'var(--serif)', fontSize: 22, lineHeight: '26px' }}>A severe cyclone is heading for the Odisha coast</span>
                   <span style={{ fontSize: 13, lineHeight: '19px', color: '#3a434b' }}>This is the phone of a resident in {place.name}. When the district approves its advisory, this phone rings and reads the warning aloud.</span>
@@ -181,8 +235,14 @@ export function PhoneApp({ place, onDistrict, replay = false }: { place: Place; 
               )}
               {!alert && !replay && outlook && <OutlookCard o={outlook} place={place.name} />}
               {!alert && (
-                <div style={{ textAlign: 'center', color: '#5f6a73', fontSize: 13, lineHeight: '19px', padding: '4px 16px' }}>
-                  No official alerts for {district || 'your area'}. Alerts from the district appear here the moment they are approved.
+                <div style={{ color: '#3a434b', fontSize: 15, lineHeight: '22px', padding: '2px 6px' }}>
+                  {t(lang, 'noAlert', { place: place.name })} {t(lang, 'alertWillCome')}
+                </div>
+              )}
+              {!reached && (
+                <div className="card fade-in tips">
+                  <b>🎒 {t(lang, 'getReady')}</b>
+                  <ul>{tips.map((x) => <li key={x}>{x}</li>)}</ul>
                 </div>
               )}
               {alert && text && (
@@ -196,29 +256,18 @@ export function PhoneApp({ place, onDistrict, replay = false }: { place: Place; 
                     <div style={{ fontSize: 15.5, lineHeight: '26px', color: '#2e363d' }}>{text.body}</div>
                   </div>
                   <div className="alert-foot">
-                    {lang !== 'en' ? <button onClick={() => setEnglish(!english)} style={{ border: 'none', background: 'none', color: '#0f5e9c', fontWeight: 600, padding: 0 }}>{english ? 'Show original' : 'See in English'}</button> : <span />}
-                    <span>{alert && (alert as any).dispatched_at ? new Date((alert as any).dispatched_at * 1000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                    {alertLang !== 'en' ? <button onClick={() => setEnglish(!english)} style={{ border: 'none', background: 'none', color: '#0f5e9c', fontWeight: 600, padding: 0 }}>{english ? t(lang, 'showOriginal') : t(lang, 'seeEnglish')}</button> : <span />}
+                    <span>{(alert as any).dispatched_at ? new Date((alert as any).dispatched_at * 1000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
                   </div>
-                </div>
-              )}
-              {alert && text?.body && (
-                <div className="row" style={{ alignSelf: 'flex-start', padding: '8px 16px 8px 8px', borderRadius: 30, background: '#fff', boxShadow: '0 8px 24px rgba(60,40,20,0.1)' }}>
-                  <button aria-label="Play voice message" onClick={() => speak(`${text.headline}. ${text.body}`, shown)}
-                    style={{ width: 44, height: 44, borderRadius: 22, border: 'none', background: 'linear-gradient(135deg,#3a93d4,#0f5e9c)', display: 'grid', placeItems: 'center' }}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M7 4 20 12 7 20Z" /></svg>
-                  </button>
-                  <span style={{ fontSize: 13, color: '#3a434b', fontWeight: 600 }}>Listen to this alert</span>
                 </div>
               )}
               {alert && shelter && <ShelterCard shelter={shelter} from={place} />}
               {alert && (
                 <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
-                  <button className="pill-btn" onClick={() => setReached(true)}>{reached ? 'Marked safe ✓' : 'Reached shelter'}</button>
-                  <button className="pill-btn" onClick={() => setScreen('bot')}>Need help</button>
-                  <button className="pill-btn hot" onClick={() => setScreen('report')}>Report water</button>
+                  {!reached && <button className="pill-btn" onClick={() => setReached(true)}>✓ {t(lang, 'reached')}</button>}
+                  <button className="pill-btn hot" onClick={() => setScreen('report')}>🌊 {t(lang, 'reportWater')}</button>
                 </div>
               )}
-              {alert && !replay && outlook && <OutlookCard o={outlook} place={place.name} />}
               {lastReport && (
                 <div className="card fade-in" style={{ padding: 14, fontSize: 14, lineHeight: '21px' }}>
                   <b>Your report was checked.</b> {lastReport.notes} {lastReport.matches_model ? 'It matches the flood forecast for this spot.' : 'The forecast did not expect water here; the control room has been told.'}
@@ -227,11 +276,11 @@ export function PhoneApp({ place, onDistrict, replay = false }: { place: Place; 
             </div>
             <div style={{ flexShrink: 0, padding: '10px 14px 18px' }}>
               <button onClick={() => setScreen('bot')} style={{ width: '100%', height: 60, borderRadius: 30, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
-                background: '#13181c', color: '#fff', fontSize: 16, fontWeight: 700, boxShadow: '0 10px 26px rgba(19,24,28,0.35)' }}>
+                background: '#13181c', color: '#fff', fontSize: 16, fontWeight: 700, boxShadow: '0 10px 26px rgba(19,24,28,0.35)', fontFamily: font }}>
                 <span style={{ width: 38, height: 38, borderRadius: 19, background: 'linear-gradient(135deg,#ff9d62,#d9412a)', display: 'grid', placeItems: 'center' }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
                 </span>
-                Talk to Sahayak <span style={{ fontWeight: 400, opacity: 0.75, fontFamily: "'Noto Sans Oriya', sans-serif" }}>· ସହାୟକ</span>
+                {t(lang, 'talk')}
               </button>
             </div>
           </>
@@ -277,7 +326,7 @@ function OutlookCard({ o, place }: { o: Outlook; place: string }) {
   )
 }
 
-function IncomingCall({ district, onAnswer, onDecline }: { district: string; onAnswer: () => void; onDecline: () => void }) {
+function IncomingCall({ lang, district, onAnswer, onDecline }: { lang: string; district: string; onAnswer: () => void; onDecline: () => void }) {
   return (
     <div className="fade-in" style={{ position: 'absolute', inset: 0, zIndex: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between',
       padding: '90px 30px 70px', color: '#fff', background: 'radial-gradient(ellipse at top, #3b1a10, #13181c 70%)' }}>
@@ -286,9 +335,9 @@ function IncomingCall({ district, onAnswer, onDecline }: { district: string; onA
           boxShadow: '0 0 0 14px rgba(255,138,76,0.15), 0 0 0 30px rgba(255,138,76,0.07)', animation: 'fade 1s infinite alternate' }}>
           <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round"><path d="M12 3a9 9 0 1 0 9 9" /><path d="M12 7a5 5 0 1 0 5 5" /><circle cx="12" cy="12" r="1.4" fill="#fff" /></svg>
         </span>
-        <span style={{ fontSize: 13, letterSpacing: '0.1em', opacity: 0.8 }}>INCOMING ALERT CALL</span>
+        <span style={{ fontSize: 14, letterSpacing: '0.06em', opacity: 0.85, fontFamily: LANG_FONT[lang] }}>{t(lang, 'incoming')}</span>
         <span style={{ fontFamily: 'var(--serif)', fontSize: 34, lineHeight: '38px' }}>Pralay Kavach</span>
-        <span style={{ fontSize: 14, opacity: 0.8 }}>{district} district · cyclone warning</span>
+        <span style={{ fontSize: 14, opacity: 0.8, fontFamily: LANG_FONT[lang] }}>{district} · {t(lang, 'cycloneWarning')}</span>
       </div>
       <div style={{ display: 'flex', gap: 70 }}>
         <button onClick={onDecline} aria-label="Decline" style={{ width: 70, height: 70, borderRadius: 35, border: 'none', background: '#c0392b', display: 'grid', placeItems: 'center' }}>

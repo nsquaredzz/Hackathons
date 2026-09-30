@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { PhoneApp, PRESETS, type Place } from './Citizen'
+import { PhoneApp } from './Citizen'
+import { PRESETS, type Place } from './places'
 
 // The resident's phone docked in the console, so the whole Fani story plays in one window:
 // approve the advisory on the left, and this phone rings.
@@ -38,7 +39,7 @@ export default function PhoneDock({ scale, width, onClose }: { scale: number; wi
       </div>
       <div style={{ width: PHONE_W * scale, height: PHONE_H * scale, margin: '0 auto' }}>
         <div style={{ width: PHONE_W, height: PHONE_H, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
-          <PhoneApp place={place} replay />
+          <PhoneApp place={place} onPlace={setPlace} replay />
         </div>
       </div>
     </aside>
